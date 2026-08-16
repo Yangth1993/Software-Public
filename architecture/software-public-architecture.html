@@ -1,0 +1,1468 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>嵌入式 GUI 公版软件架构 · 初版</title>
+  <style>
+    :root {
+      --bg: #071219;
+      --bg-deep: #040b10;
+      --surface: #0d1d26;
+      --surface-2: #122833;
+      --surface-3: #172f3b;
+      --line: #294550;
+      --line-hot: #577684;
+      --ink: #e8f1ed;
+      --muted: #91a8ad;
+      --public: #70d49b;
+      --public-soft: rgba(112, 212, 155, .13);
+      --platform: #54b6e7;
+      --platform-soft: rgba(84, 182, 231, .13);
+      --gui: #f0a25c;
+      --gui-soft: rgba(240, 162, 92, .13);
+      --hardware: #8d9ba3;
+      --hardware-soft: rgba(141, 155, 163, .12);
+      --reserved: #d4bc6b;
+      --danger: #ef7c6f;
+      --radius: 14px;
+      --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --sans: Bahnschrift, "Microsoft YaHei", "Noto Sans SC", sans-serif;
+      --shadow: 0 22px 70px rgba(0, 0, 0, .25);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 1120px;
+      color: var(--ink);
+      font-family: var(--sans);
+      background:
+        linear-gradient(rgba(67, 120, 137, .07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(67, 120, 137, .07) 1px, transparent 1px),
+        radial-gradient(circle at 14% 5%, rgba(84, 182, 231, .12), transparent 32rem),
+        radial-gradient(circle at 88% 12%, rgba(112, 212, 155, .09), transparent 28rem),
+        var(--bg);
+      background-size: 32px 32px, 32px 32px, auto, auto, auto;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .14;
+      background-image: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 255, 255, .025) 4px);
+      mix-blend-mode: overlay;
+    }
+
+    button { font: inherit; }
+    button:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 3px;
+    }
+
+    .page-shell {
+      width: min(1560px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 36px 0 60px;
+    }
+
+    .hero {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(480px, 1fr);
+      gap: 48px;
+      align-items: end;
+      padding: 38px 42px 32px;
+      border: 1px solid var(--line);
+      border-radius: 22px 22px 0 0;
+      overflow: hidden;
+      background: linear-gradient(110deg, rgba(16, 43, 54, .95), rgba(8, 22, 30, .95));
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      content: "PUBLIC / PORT / ADAPTER";
+      position: absolute;
+      right: -12px;
+      top: 12px;
+      color: rgba(255, 255, 255, .035);
+      font: 700 54px/1 var(--mono);
+      letter-spacing: -.06em;
+      transform: rotate(-4deg);
+      white-space: nowrap;
+    }
+
+    .eyebrow,
+    .section-kicker,
+    .layer-index,
+    .panel-label {
+      color: var(--platform);
+      font: 700 11px/1.3 var(--mono);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 12px 0 10px;
+      max-width: 820px;
+      font-size: clamp(40px, 4vw, 68px);
+      line-height: .98;
+      letter-spacing: -.045em;
+      font-weight: 740;
+    }
+
+    .hero-copy {
+      margin: 0;
+      max-width: 780px;
+      color: #b9c9c9;
+      font-size: 16px;
+      line-height: 1.75;
+    }
+
+    .hero-stats {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .stat {
+      min-height: 92px;
+      padding: 16px 18px;
+      border: 1px solid rgba(126, 164, 173, .25);
+      background: rgba(4, 13, 18, .38);
+    }
+
+    .stat b {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--public);
+      font: 700 25px/1 var(--mono);
+    }
+
+    .stat span { color: var(--muted); font-size: 12px; }
+
+    .view-tabs {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      gap: 0;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-top: 0;
+      background: rgba(7, 18, 25, .93);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, .2);
+    }
+
+    .view-tab {
+      position: relative;
+      min-width: 190px;
+      padding: 19px 24px 17px;
+      border: 0;
+      border-left: 1px solid var(--line);
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      transition: color .2s ease, background .2s ease;
+    }
+
+    .view-tab:last-child { border-right: 1px solid var(--line); }
+    .view-tab small { display: block; margin-bottom: 4px; color: #607c85; font: 10px var(--mono); }
+    .view-tab[aria-selected="true"] { color: var(--ink); background: rgba(84, 182, 231, .08); }
+    .view-tab[aria-selected="true"]::after {
+      content: "";
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: -1px;
+      height: 3px;
+      background: var(--platform);
+      box-shadow: 0 0 18px rgba(84, 182, 231, .65);
+    }
+
+    .view {
+      border: 1px solid var(--line);
+      border-top: 0;
+      padding: 34px;
+      background: rgba(7, 18, 25, .84);
+      animation: view-in .38s ease both;
+    }
+
+    .view[hidden] { display: none; }
+
+    @keyframes view-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 32px;
+      margin-bottom: 24px;
+    }
+
+    .section-head h2 {
+      margin: 7px 0 6px;
+      font-size: 31px;
+      line-height: 1.1;
+      letter-spacing: -.025em;
+    }
+
+    .section-head p { margin: 0; max-width: 760px; color: var(--muted); line-height: 1.65; }
+
+    .filter-stack {
+      display: grid;
+      gap: 9px;
+      justify-items: end;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .filter-label {
+      margin-right: 3px;
+      color: #6f8a92;
+      font: 700 9px var(--mono);
+      letter-spacing: .12em;
+    }
+
+    .filters,
+    .flow-switcher {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      justify-content: flex-end;
+    }
+
+    .filter,
+    .flow-switch {
+      border: 1px solid var(--line);
+      padding: 9px 12px;
+      color: var(--muted);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 12px;
+      transition: .2s ease;
+    }
+
+    .filter[aria-pressed="true"],
+    .flow-switch[aria-pressed="true"] {
+      color: var(--ink);
+      border-color: var(--platform);
+      background: var(--platform-soft);
+    }
+
+    [data-product-filter][aria-pressed="true"] {
+      border-color: var(--public);
+      background: var(--public-soft);
+    }
+
+    .overview-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 300px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .layer-board {
+      position: relative;
+      display: grid;
+      gap: 8px;
+    }
+
+    .layer-row {
+      display: grid;
+      grid-template-columns: 154px minmax(0, 1fr) 155px;
+      min-height: 106px;
+      border: 1px solid var(--line);
+      background: rgba(13, 29, 38, .72);
+    }
+
+    .layer-meta {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 14px;
+      border-right: 1px solid var(--line);
+      background: rgba(3, 12, 17, .35);
+    }
+
+    .layer-meta h3 { margin: 7px 0 0; font-size: 15px; line-height: 1.3; }
+    .layer-meta p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+    .node-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(115px, 1fr));
+      gap: 7px;
+      align-content: center;
+      padding: 10px;
+    }
+
+    .node {
+      position: relative;
+      min-height: 66px;
+      padding: 11px 10px;
+      border: 1px solid var(--line-hot);
+      border-left-width: 4px;
+      color: var(--ink);
+      background: var(--surface-2);
+      text-align: left;
+      cursor: pointer;
+      transition: opacity .2s ease, transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+    }
+
+    .node:hover { transform: translateY(-2px); }
+    .node code { display: block; color: inherit; font: 700 11px/1.35 var(--mono); overflow-wrap: anywhere; }
+    .node span { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+    .node.public { border-left-color: var(--public); background: linear-gradient(135deg, var(--public-soft), var(--surface-2) 64%); }
+    .node.platform { border-left-color: var(--platform); background: linear-gradient(135deg, var(--platform-soft), var(--surface-2) 64%); }
+    .node.gui { border-left-color: var(--gui); background: linear-gradient(135deg, var(--gui-soft), var(--surface-2) 64%); }
+    .node.hardware { border-left-color: var(--hardware); background: linear-gradient(135deg, var(--hardware-soft), var(--surface-2) 64%); }
+    .node.reserved { border-style: dashed; border-left-color: var(--reserved); }
+    .node.is-selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink), 0 0 24px rgba(232, 241, 237, .12); }
+    .node.is-related { border-color: var(--public); box-shadow: 0 0 18px rgba(112, 212, 155, .13); }
+    .node.is-muted { opacity: .27; }
+    .node.is-filtered {
+      opacity: .13;
+      filter: saturate(.2);
+      pointer-events: none;
+    }
+
+    .node.is-product-filtered {
+      opacity: .13;
+      filter: saturate(.2);
+      pointer-events: none;
+    }
+
+    .target-stack {
+      display: flex;
+      flex-wrap: wrap;
+      align-content: center;
+      gap: 5px;
+      padding: 10px;
+      border-left: 1px solid var(--line);
+    }
+
+    .target {
+      padding: 5px 7px;
+      border: 1px solid rgba(145, 168, 173, .28);
+      color: #a9bdc1;
+      background: rgba(6, 18, 24, .5);
+      font: 700 9px/1.2 var(--mono);
+    }
+
+    .detail-panel {
+      position: sticky;
+      top: 86px;
+      border: 1px solid var(--line-hot);
+      background: linear-gradient(180deg, rgba(18, 40, 51, .98), rgba(9, 23, 30, .98));
+      box-shadow: var(--shadow);
+    }
+
+    .detail-top { padding: 18px 18px 15px; border-bottom: 1px solid var(--line); }
+    .detail-top code { display: block; margin-top: 8px; color: var(--public); font: 700 15px var(--mono); }
+    .detail-body { padding: 17px 18px; }
+    .detail-body dl { margin: 0; }
+    .detail-body dt { margin-top: 15px; color: #6f8a92; font: 700 9px var(--mono); letter-spacing: .13em; text-transform: uppercase; }
+    .detail-body dt:first-child { margin-top: 0; }
+    .detail-body dd { margin: 6px 0 0; color: #bed0d0; font-size: 12px; line-height: 1.55; }
+
+    .rule-strip {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+      margin-top: 16px;
+    }
+
+    .rule {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 13px 15px;
+      border: 1px solid rgba(239, 124, 111, .35);
+      background: rgba(239, 124, 111, .07);
+      color: #d7c3bf;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .rule b { color: var(--danger); font: 700 11px var(--mono); white-space: nowrap; }
+
+    .contract-stage {
+      display: grid;
+      grid-template-columns: minmax(230px, .8fr) minmax(510px, 1.7fr) minmax(230px, .8fr);
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .platform-column,
+    .contract-core {
+      border: 1px solid var(--line);
+      background: rgba(13, 29, 38, .74);
+    }
+
+    .column-head { padding: 16px; border-bottom: 1px solid var(--line); }
+    .column-head h3 { margin: 7px 0 4px; font-size: 18px; }
+    .column-head p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+    .adapter-card {
+      margin: 10px;
+      padding: 14px;
+      border: 1px solid rgba(84, 182, 231, .38);
+      background: var(--platform-soft);
+    }
+
+    .adapter-card.gui-adapter { border-color: rgba(240, 162, 92, .42); background: var(--gui-soft); }
+    .adapter-card code { color: var(--platform); font: 700 11px var(--mono); }
+    .adapter-card.gui-adapter code { color: var(--gui); }
+    .adapter-card p { margin: 7px 0 0; color: #b7c9ca; font-size: 11px; line-height: 1.55; }
+
+    .contract-core { border-color: rgba(112, 212, 155, .42); background: rgba(112, 212, 155, .035); }
+    .contract-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px; }
+    .contract {
+      padding: 13px;
+      border: 1px solid rgba(112, 212, 155, .32);
+      background: rgba(7, 23, 27, .85);
+    }
+    .contract.reserved { border-style: dashed; border-color: rgba(212, 188, 107, .55); }
+    .contract h4 { margin: 0; color: var(--public); font: 700 12px var(--mono); }
+    .contract.reserved h4 { color: var(--reserved); }
+    .contract p { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+
+    .code-contracts {
+      margin: 0 12px 12px;
+      padding: 15px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      color: #c6dde0;
+      background: #061016;
+      font: 10.5px/1.75 var(--mono);
+      white-space: pre-wrap;
+    }
+
+    .usb-boundary {
+      display: grid;
+      grid-template-columns: 1fr 240px 1fr;
+      gap: 12px;
+      align-items: center;
+      margin-top: 16px;
+      padding: 18px;
+      border: 1px solid var(--line-hot);
+      background: linear-gradient(90deg, rgba(84, 182, 231, .08), rgba(112, 212, 155, .05), rgba(84, 182, 231, .08));
+    }
+
+    .chip-card {
+      min-height: 98px;
+      padding: 15px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .chip-card strong { display: block; font-size: 17px; }
+    .chip-card p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .wire {
+      position: relative;
+      color: var(--platform);
+      text-align: center;
+      font: 700 10px/1.4 var(--mono);
+    }
+    .wire::before,
+    .wire::after { content: ""; position: absolute; top: 50%; width: 30%; height: 1px; background: var(--platform); }
+    .wire::before { left: 0; }
+    .wire::after { right: 0; }
+    .wire span { display: inline-block; padding: 7px; border: 1px solid var(--platform); background: var(--bg); }
+
+    .boundary-note {
+      margin-top: 12px;
+      padding: 13px 15px;
+      border-left: 3px solid var(--public);
+      color: #c0d1cf;
+      background: rgba(112, 212, 155, .07);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .power-map {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) minmax(330px, 1.25fr) minmax(260px, 1fr);
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .power-role,
+    .power-contract {
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: rgba(13, 29, 38, .78);
+    }
+
+    .power-role h3,
+    .power-contract h3 { margin: 7px 0 7px; font-size: 16px; }
+    .power-role code,
+    .power-contract code { color: var(--public); font: 700 11px var(--mono); }
+    .power-role p,
+    .power-contract p { margin: 6px 0 11px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .state-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+    .state-tags span { padding: 5px 7px; border: 1px solid var(--line); color: #b9cccd; background: #08171e; font: 700 9px var(--mono); }
+    .power-contract { border-color: rgba(112, 212, 155, .42); background: var(--public-soft); }
+    .power-contract .state-tags span { border-color: rgba(112, 212, 155, .34); }
+
+    .flow-panel[hidden] { display: none; }
+    .flow-board { border: 1px solid var(--line); background: rgba(13, 29, 38, .73); }
+    .flow-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 19px; border-bottom: 1px solid var(--line); }
+    .flow-head h3 { margin: 0; font-size: 20px; }
+    .flow-head p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+    .rate-badge { padding: 8px 10px; border: 1px solid var(--public); color: var(--public); font: 700 10px var(--mono); }
+
+    .flow-lane {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      border-bottom: 1px solid var(--line);
+    }
+    .flow-lane:last-child { border-bottom: 0; }
+    .lane-label {
+      padding: 20px 14px;
+      border-right: 1px solid var(--line);
+      color: var(--muted);
+      background: rgba(4, 14, 19, .4);
+      font: 700 10px/1.5 var(--mono);
+    }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 18px;
+      align-items: stretch;
+      padding: 17px;
+    }
+    .steps.seven { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+    .step {
+      position: relative;
+      min-height: 96px;
+      padding: 13px 11px;
+      border: 1px solid var(--line-hot);
+      background: var(--surface-2);
+    }
+    .step::after {
+      content: "→";
+      position: absolute;
+      right: -16px;
+      top: 37%;
+      color: var(--platform);
+      font: 700 16px var(--mono);
+    }
+    .step:last-child::after { content: none; }
+    .step b { display: block; color: var(--public); font: 700 9px var(--mono); }
+    .step strong { display: block; margin-top: 8px; font-size: 12px; line-height: 1.35; }
+    .step small { display: block; margin-top: 7px; color: var(--muted); font-size: 9px; line-height: 1.45; }
+    .step.gui-step { border-color: rgba(240, 162, 92, .48); }
+    .step.gui-step b { color: var(--gui); }
+    .step.platform-step { border-color: rgba(84, 182, 231, .48); }
+    .step.platform-step b { color: var(--platform); }
+
+    .flow-callouts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .callout { padding: 14px; border: 1px solid var(--line); background: rgba(13, 29, 38, .75); }
+    .callout b { display: block; margin-bottom: 6px; color: var(--public); font: 700 10px var(--mono); }
+    .callout p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+
+    .interface-controls {
+      display: grid;
+      gap: 9px;
+      justify-items: end;
+    }
+
+    .interface-trace[hidden] { display: none; }
+    .interface-trace {
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      background: rgba(13, 29, 38, .72);
+    }
+
+    .trace-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 15px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .trace-title h3 { margin: 0; font-size: 18px; }
+    .trace-title p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+
+    .trace-row {
+      display: grid;
+      grid-template-columns: 118px minmax(0, 1fr);
+      border-bottom: 1px solid var(--line);
+    }
+    .trace-row:last-child { border-bottom: 0; }
+    .trace-lane {
+      padding: 17px 13px;
+      border-right: 1px solid var(--line);
+      color: #78939a;
+      background: rgba(4, 14, 19, .42);
+      font: 700 9px/1.55 var(--mono);
+      letter-spacing: .06em;
+    }
+    .trace-cards {
+      display: grid;
+      grid-template-columns: repeat(var(--trace-columns, 5), minmax(0, 1fr));
+      gap: 16px;
+      padding: 15px;
+    }
+    .trace-card {
+      position: relative;
+      min-height: 104px;
+      padding: 12px 11px;
+      border: 1px solid rgba(112, 212, 155, .38);
+      background: linear-gradient(135deg, rgba(112, 212, 155, .08), rgba(12, 31, 39, .94) 70%);
+    }
+    .trace-card::after {
+      content: "→";
+      position: absolute;
+      right: -14px;
+      top: 42%;
+      color: var(--platform);
+      font: 700 15px var(--mono);
+    }
+    .trace-card:last-child::after { content: none; }
+    .trace-card.platform-card { border-color: rgba(84, 182, 231, .48); background: linear-gradient(135deg, var(--platform-soft), rgba(12, 31, 39, .94) 70%); }
+    .trace-card.hardware-card { border-color: rgba(145, 168, 173, .42); background: linear-gradient(135deg, rgba(145, 168, 173, .08), rgba(12, 31, 39, .94) 70%); }
+    .trace-card b { display: block; color: var(--public); font: 700 9px var(--mono); }
+    .trace-card.platform-card b { color: var(--platform); }
+    .trace-card.hardware-card b { color: var(--hardware); }
+    .trace-card code { display: block; margin-top: 8px; color: var(--ink); font: 700 11px/1.35 var(--mono); overflow-wrap: anywhere; }
+    .trace-card small { display: block; margin-top: 7px; color: var(--muted); font-size: 9px; line-height: 1.45; }
+
+    .interface-matrix {
+      margin-top: 16px;
+      border: 1px solid var(--line-hot);
+      background: rgba(7, 18, 25, .68);
+    }
+    .matrix-head,
+    .interface-node {
+      display: grid;
+      grid-template-columns: 170px minmax(270px, .9fr) minmax(0, 1.4fr);
+      align-items: stretch;
+    }
+    .matrix-head {
+      color: #6f8a92;
+      background: rgba(84, 182, 231, .06);
+      font: 700 9px var(--mono);
+      letter-spacing: .12em;
+    }
+    .matrix-head span,
+    .interface-node > * { padding: 11px 13px; border-right: 1px solid var(--line); }
+    .matrix-head span:last-child,
+    .interface-node > *:last-child { border-right: 0; }
+    .interface-node {
+      min-height: 70px;
+      border-top: 1px solid var(--line);
+      transition: opacity .2s ease, filter .2s ease;
+    }
+    .interface-node strong { color: var(--public); font: 700 10px/1.45 var(--mono); }
+    .interface-node.platform-node strong { color: var(--platform); }
+    .interface-node.hardware-node strong { color: var(--hardware); }
+    .interface-node code { color: #d0dfe0; font: 700 10px/1.5 var(--mono); overflow-wrap: anywhere; }
+    .interface-node p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+    .interface-node.is-interface-filtered { opacity: .14; filter: saturate(.2); }
+
+    .interface-code-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .interface-code-grid pre { margin: 0; min-height: 150px; }
+    .interface-warning { border-left-color: var(--reserved); background: rgba(212, 188, 107, .08); }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 11px; height: 11px; border: 2px solid currentColor; }
+    .swatch.public { color: var(--public); }
+    .swatch.platform { color: var(--platform); }
+    .swatch.gui { color: var(--gui); }
+    .swatch.hardware { color: var(--hardware); }
+    .swatch.reserved { color: var(--reserved); border-style: dashed; }
+
+    .page-foot {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 20px 4px 0;
+      color: #668087;
+      font: 10px/1.5 var(--mono);
+    }
+
+    @media (max-width: 1280px) {
+      .node-grid { grid-template-columns: repeat(3, minmax(110px, 1fr)); }
+      .steps, .steps.seven { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .step:nth-child(4)::after { content: none; }
+      .trace-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .trace-card:nth-child(3)::after { content: none; }
+    }
+
+    @media print {
+      @page { size: A3 landscape; margin: 10mm; }
+      body { min-width: 0; color: #10232b; background: white; }
+      body::before, .view-tabs, .filters, .flow-switcher, .page-foot { display: none !important; }
+      .page-shell { width: 100%; padding: 0; }
+      .hero { color: #10232b; background: white; border-color: #607780; box-shadow: none; }
+      .hero-copy, .stat span { color: #435a62; }
+      .view { display: block !important; border: 0; padding: 15px 0; background: white; break-after: page; }
+      .node, .platform-column, .contract-core, .flow-board, .detail-panel, .callout, .interface-trace, .interface-matrix, .trace-card { color: #10232b; background: white !important; box-shadow: none; }
+      .node span, .section-head p, .adapter-card p, .contract p, .flow-head p, .step small, .callout p, .detail-body dd { color: #435a62; }
+      .detail-panel { position: static; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">Software Public Architecture / Draft 02</div>
+        <h1>一套业务核心，<br>两套 RTOS 落地。</h1>
+        <p class="hero-copy">面向 EB100、EB400、EB500 的嵌入式 GUI 公版架构。参照 Zephyr 的 Application → Services → Kernel/Platform 分层方式，增加共享业务、稳定 C 接口、双芯片状态同步与 GUI 框架边界。</p>
+      </div>
+      <div class="hero-stats" aria-label="方案摘要">
+        <div class="stat"><b>07</b><span>目录与责任层级</span></div>
+        <div class="stat"><b>01</b><span>共享应用代码仓库</span></div>
+        <div class="stat"><b>02</b><span>Zephyr / Melis 平台实现</span></div>
+        <div class="stat"><b>03</b><span>项目装配目标</span></div>
+      </div>
+    </header>
+
+    <nav class="view-tabs" aria-label="架构视图" role="tablist">
+      <button class="view-tab" type="button" role="tab" aria-selected="true" data-target="overview"><small>VIEW 01</small>总体分层</button>
+      <button class="view-tab" type="button" role="tab" aria-selected="false" data-target="platform"><small>VIEW 02</small>平台对接</button>
+      <button class="view-tab" type="button" role="tab" aria-selected="false" data-target="flows"><small>VIEW 03</small>业务走查</button>
+      <button class="view-tab" type="button" role="tab" aria-selected="false" data-target="interfaces"><small>VIEW 04</small>接口落位</button>
+    </nav>
+
+    <main>
+      <section class="view is-active" data-view="overview" role="tabpanel">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Folder placement / ownership</div>
+            <h2>总体分层与建议目录</h2>
+            <p>绿色区域是第一阶段复用重点。平台筛选回答“接口由谁实现”，产品筛选回答“本产品编译哪些公版模块”；两者互不替代，切换时所有卡片位置保持不变。</p>
+          </div>
+          <div class="filter-stack" aria-label="目录筛选">
+            <div class="filter-group">
+              <span class="filter-label">PLATFORM</span>
+              <button class="filter" type="button" data-filter="all" aria-pressed="true">全部</button>
+              <button class="filter" type="button" data-filter="public" aria-pressed="false">公版代码</button>
+              <button class="filter" type="button" data-filter="zephyr" aria-pressed="false">Zephyr</button>
+              <button class="filter" type="button" data-filter="melis" aria-pressed="false">Melis</button>
+              <button class="filter" type="button" data-filter="ew" aria-pressed="false">Embedded Wizard</button>
+              <button class="filter" type="button" data-filter="lvgl" aria-pressed="false">LVGL</button>
+            </div>
+            <div class="filter-group">
+              <span class="filter-label">PRODUCT</span>
+              <button class="filter" type="button" data-product-filter="all-products" aria-pressed="true">全部产品</button>
+              <button class="filter" type="button" data-product-filter="eb100" aria-pressed="false">EB100</button>
+              <button class="filter" type="button" data-product-filter="eb400" aria-pressed="false">EB400</button>
+              <button class="filter" type="button" data-product-filter="eb500-rt" aria-pressed="false">EB500 · RT</button>
+              <button class="filter" type="button" data-product-filter="eb500-gui" aria-pressed="false">EB500 · GUI</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="overview-layout">
+          <div class="layer-board" aria-label="软件架构层">
+            <article class="layer-row">
+              <div class="layer-meta"><div><span class="layer-index">L7 / Assembly</span><h3>产品装配层</h3></div><p>只选择能力和目标，不承载业务实现</p></div>
+              <div class="node-grid">
+                <button class="node hardware" type="button" data-node="product-eb100" data-kind="hardware" data-tags="zephyr ew" data-products="eb100"><code>products/eb100/product.conf</code><span>RT1172 · MIPI · EW</span></button>
+                <button class="node hardware" type="button" data-node="product-eb400" data-kind="hardware" data-tags="zephyr ew" data-products="eb400"><code>products/eb400/product.conf</code><span>RT1046 · SPI · EW</span></button>
+                <button class="node hardware" type="button" data-node="product-eb500-rt" data-kind="hardware" data-tags="zephyr" data-products="eb500-rt"><code>products/eb500_rt/product.conf</code><span>RT1046 · 权威状态</span></button>
+                <button class="node hardware" type="button" data-node="product-eb500-gui" data-kind="hardware" data-tags="melis lvgl" data-products="eb500-gui"><code>products/eb500_gui/product.conf</code><span>F133 · GUI / Wi-Fi</span></button>
+              </div>
+              <div class="target-stack"><span class="target">EB100</span><span class="target">EB400</span><span class="target">EB500 · RT</span><span class="target">EB500 · GUI</span></div>
+            </article>
+
+            <article class="layer-row">
+              <div class="layer-meta"><div><span class="layer-index">L6 / Presentation</span><h3>GUI View 层</h3></div><p>第一阶段允许两套页面实现</p></div>
+              <div class="node-grid">
+                <button class="node gui" type="button" data-node="gui-ew" data-kind="gui" data-tags="ew" data-products="eb100 eb400"><code>gui/embedded_wizard</code><span>EB100 / EB400 页面</span></button>
+                <button class="node gui" type="button" data-node="gui-lvgl" data-kind="gui" data-tags="lvgl" data-products="eb500-gui"><code>gui/lvgl</code><span>EB500 F133 页面</span></button>
+              </div>
+              <div class="target-stack"><span class="target">EB100</span><span class="target">EB400</span><span class="target">EB500 · GUI</span></div>
+            </article>
+
+            <article class="layer-row">
+              <div class="layer-meta"><div><span class="layer-index">L5 / Shared app</span><h3>共享应用层</h3></div><p>按业务域组织；源码跨平台，产品按需装配</p></div>
+              <div class="node-grid">
+                <button class="node public" type="button" data-node="app-core" data-kind="public" data-tags="zephyr melis ew lvgl" data-products="eb100 eb400 eb500-rt eb500-gui"><code>app/core</code><span>模型 / Action / 公共运行骨架</span></button>
+                <button class="node public" type="button" data-node="app-system-lifecycle" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt"><code>app/system_lifecycle</code><span>整机电源与运行状态机</span></button>
+                <button class="node public" type="button" data-node="app-gui-lifecycle" data-kind="public" data-tags="zephyr melis" data-products="eb500-gui"><code>app/gui_lifecycle</code><span>F133 GUI 子系统状态机</span></button>
+                <button class="node public" type="button" data-node="app-ride" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt"><code>app/ride</code><span>骑行状态与里程业务</span></button>
+                <button class="node public" type="button" data-node="app-vehicle" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt"><code>app/vehicle</code><span>车辆 / 助力参数业务</span></button>
+                <button class="node public" type="button" data-node="app-settings" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>app/settings</code><span>用户设置与校验</span></button>
+                <button class="node public" type="button" data-node="app-navigation" data-kind="public" data-tags="zephyr melis" data-products="eb500-gui"><code>app/navigation</code><span>导航状态与语音提示</span></button>
+                <button class="node public" type="button" data-node="app-connectivity" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>app/connectivity</code><span>BLE / 4G / Wi-Fi 用例</span></button>
+                <button class="node public" type="button" data-node="app-data-export" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>app/data_export</code><span>日志与大文件导出用例</span></button>
+                <button class="node public" type="button" data-node="app-diagnostics" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>app/diagnostics</code><span>健康状态与诊断事件</span></button>
+                <button class="node public" type="button" data-node="app-viewmodel" data-kind="public" data-tags="zephyr melis ew lvgl" data-products="eb100 eb400 eb500-gui"><code>app/viewmodel</code><span>GUI 可消费快照</span></button>
+                <button class="node public reserved" type="button" data-node="app-update" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>app/update</code><span>升级用例位置预留</span></button>
+              </div>
+              <div class="target-stack"><span class="target">PORTABLE C</span><span class="target">SELECTED BY product.conf</span><span class="target">NO #if EBxxx</span></div>
+            </article>
+
+            <article class="layer-row">
+              <div class="layer-meta"><div><span class="layer-index">L4 / Components</span><h3>公共组件层</h3></div><p>平台无关能力库；未选用不代表不能在该平台运行</p></div>
+              <div class="node-grid">
+                <button class="node public" type="button" data-node="component-sensor-hub" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt"><code>components/sensor_hub</code><span>采集调度与统一样本</span></button>
+                <button class="node public" type="button" data-node="component-motion-fusion" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt"><code>components/motion_fusion</code><span>1 kHz 滤波 / 姿态融合</span></button>
+                <button class="node public" type="button" data-node="component-positioning" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>components/positioning</code><span>GPS / 导航位置模型</span></button>
+                <button class="node public" type="button" data-node="component-environment" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt"><code>components/environment</code><span>气压 / 光感 / 指南针</span></button>
+                <button class="node public" type="button" data-node="component-vehicle-bus" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt"><code>components/vehicle_bus</code><span>CAN 车辆能力</span></button>
+                <button class="node public" type="button" data-node="component-power" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>components/power</code><span>共享契约与电源协作</span></button>
+                <button class="node public" type="button" data-node="component-config-store" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>components/config_store</code><span>参数模型 / 版本 / 校验</span></button>
+                <button class="node public" type="button" data-node="component-state-sync" data-kind="public" data-tags="zephyr melis" data-products="eb500-rt eb500-gui"><code>components/state_sync</code><span>双芯片镜像与 Action</span></button>
+                <button class="node public" type="button" data-node="component-logging" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>components/logging</code><span>结构化事件与记录</span></button>
+                <button class="node public" type="button" data-node="component-file-transfer" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>components/file_transfer</code><span>USB / Wi-Fi 文件会话</span></button>
+                <button class="node public" type="button" data-node="component-resource-manager" data-kind="public" data-tags="zephyr melis" data-products="eb500-gui"><code>components/resource_manager</code><span>地图 / GUI 资源生命周期</span></button>
+                <button class="node public" type="button" data-node="component-voice-player" data-kind="public" data-tags="zephyr melis" data-products="eb500-gui"><code>components/voice_player</code><span>导航语音输出队列</span></button>
+                <button class="node public reserved" type="button" data-node="component-update-endpoint" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>components/update_endpoint</code><span>升级对象接口预留</span></button>
+              </div>
+              <div class="target-stack"><span class="target">PORTABLE C</span><span class="target">CAPABILITY BASED</span><span class="target">UNIT TESTABLE</span></div>
+            </article>
+
+            <article class="layer-row">
+              <div class="layer-meta"><div><span class="layer-index">L3 / Stable C ports</span><h3>公共接口层</h3></div><p>隔离 OS、设备、GUI 与芯片边界</p></div>
+              <div class="node-grid">
+                <button class="node public" type="button" data-node="port-storage" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>ports/storage.h</code><span>Flash / eMMC / U盘</span></button>
+                <button class="node public" type="button" data-node="port-transport" data-kind="public" data-tags="zephyr melis" data-products="eb500-rt eb500-gui"><code>ports/transport.h</code><span>USB 状态 / 动作契约</span></button>
+                <button class="node public" type="button" data-node="port-time" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>ports/time.h</code><span>时钟与周期基准</span></button>
+                <button class="node public" type="button" data-node="port-device" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>ports/device.h</code><span>统一设备能力</span></button>
+                <button class="node public" type="button" data-node="port-event" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>ports/event.h</code><span>组件事件总线</span></button>
+                <button class="node public" type="button" data-node="port-power" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>ports/power_device.h</code><span>平台电源动作与唤醒源</span></button>
+                <button class="node public" type="button" data-node="port-gui" data-kind="public" data-tags="ew lvgl" data-products="eb100 eb400 eb500-gui"><code>ports/gui_binding.h</code><span>快照输出 / Action 输入</span></button>
+                <button class="node public reserved" type="button" data-node="port-update" data-kind="public" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>ports/update.h</code><span>三类升级对象接口</span></button>
+              </div>
+              <div class="target-stack"><span class="target">C API / ABI</span><span class="target">NO RTOS TYPES</span><span class="target">NO GUI OBJECTS</span></div>
+            </article>
+
+            <article class="layer-row">
+              <div class="layer-meta"><div><span class="layer-index">L2 / Adapters</span><h3>系统适配层</h3></div><p>平台私有类型只允许停留在这里</p></div>
+              <div class="node-grid">
+                <button class="node platform" type="button" data-node="adapter-zephyr" data-kind="platform" data-tags="zephyr" data-products="eb100 eb400 eb500-rt"><code>adapters/zephyr</code><span>Zephyr 3.1 实现全部 ports</span></button>
+                <button class="node platform" type="button" data-node="adapter-melis" data-kind="platform" data-tags="melis" data-products="eb500-gui"><code>adapters/melis</code><span>Melis 实现全部 ports</span></button>
+                <button class="node gui" type="button" data-node="adapter-ew" data-kind="gui" data-tags="ew" data-products="eb100 eb400"><code>adapters/ew</code><span>ViewModel ↔ EW</span></button>
+                <button class="node gui" type="button" data-node="adapter-lvgl" data-kind="gui" data-tags="lvgl" data-products="eb500-gui"><code>adapters/lvgl</code><span>ViewModel ↔ LVGL</span></button>
+              </div>
+              <div class="target-stack"><span class="target">Zephyr 3.1</span><span class="target">Melis 4.x</span><span class="target">EW</span><span class="target">LVGL</span></div>
+            </article>
+
+            <article class="layer-row">
+              <div class="layer-meta"><div><span class="layer-index">L1 / Platform</span><h3>BSP / 驱动 / 硬件</h3></div><p>芯片、板级和设备差异</p></div>
+              <div class="node-grid">
+                <button class="node hardware" type="button" data-node="board-nxp" data-kind="hardware" data-tags="zephyr" data-products="eb100 eb400 eb500-rt"><code>boards/nxp</code><span>RT1172 / RT1046 BSP</span></button>
+                <button class="node hardware" type="button" data-node="board-f133" data-kind="hardware" data-tags="melis" data-products="eb500-gui"><code>boards/allwinner</code><span>F133 BSP / boot chain</span></button>
+                <button class="node hardware" type="button" data-node="drivers" data-kind="hardware" data-tags="zephyr melis" data-products="eb100 eb400 eb500-rt eb500-gui"><code>drivers/</code><span>IMU / CAN / USB / 显示</span></button>
+                <button class="node hardware" type="button" data-node="hardware" data-kind="hardware" data-tags="zephyr melis ew lvgl" data-products="eb100 eb400 eb500-rt eb500-gui"><code>hardware</code><span>RT1172 · RT1046 · F133</span></button>
+              </div>
+              <div class="target-stack"><span class="target">MIPI / SPI</span><span class="target">I²C Touch</span><span class="target">CAN / USB</span><span class="target">Sensors</span></div>
+            </article>
+          </div>
+
+          <aside class="detail-panel" id="node-detail" aria-live="polite">
+            <div class="detail-top"><div class="panel-label">Selected module</div><code id="detail-path">app/state</code></div>
+            <div class="detail-body">
+              <dl>
+                <dt>职责</dt><dd id="detail-role">维护主状态、状态版本和一致性边界。</dd>
+                <dt>部署</dt><dd id="detail-target">EB100 / EB400 / EB500 RT1046</dd>
+                <dt>依赖规则</dt><dd id="detail-rule">不得依赖 GUI 或 RTOS 私有类型。</dd>
+                <dt>换芯影响</dt><dd id="detail-impact">原则上不变；由 ports 与 adapters 吸收差异。</dd>
+              </dl>
+            </div>
+          </aside>
+        </div>
+
+        <div class="rule-strip">
+          <div class="rule"><b>RULE / 01</b><span>`app/` 与 `components/` 不得引用 Zephyr、Melis 的线程、队列、设备句柄或私有错误码。</span></div>
+          <div class="rule"><b>RULE / 02</b><span>公共业务代码不得持有 Embedded Wizard 或 LVGL 对象；GUI 只能消费 ViewModel 并提交 Action。</span></div>
+        </div>
+
+        <div class="legend" aria-label="颜色图例">
+          <span><i class="swatch public"></i>公版代码</span><span><i class="swatch platform"></i>平台适配</span><span><i class="swatch gui"></i>GUI 专用</span><span><i class="swatch hardware"></i>BSP / 硬件</span><span><i class="swatch reserved"></i>接口位置预留</span>
+        </div>
+      </section>
+
+      <section class="view" data-view="platform" role="tabpanel" hidden>
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Port / adapter boundary</div>
+            <h2>公版向下对接不同系统</h2>
+            <p>公共接口位于中心，平台与 GUI 实现分列两侧。所有跨边界数据使用公版 C 数据结构，不允许透传指针、RTOS 句柄或 GUI 对象。</p>
+          </div>
+        </div>
+
+        <div class="contract-stage">
+          <section class="platform-column">
+            <div class="column-head"><span class="panel-label">LEFT TARGET</span><h3>Zephyr 3.1</h3><p>RT1172 / RT1046 实时侧</p></div>
+            <div class="adapter-card"><code>adapters/zephyr/storage.c</code><p>Flash 分区、设置持久化、日志后端。</p></div>
+            <div class="adapter-card"><code>adapters/zephyr/device.c</code><p>Sensor、CAN、BLE、4G、USB Device 能力。</p></div>
+            <div class="adapter-card"><code>adapters/zephyr/power_device.c</code><p>低功耗入口、唤醒源与最终断电动作。</p></div>
+            <div class="adapter-card"><code>adapters/zephyr/os.c</code><p>线程、队列、定时器和同步原语封装。</p></div>
+            <div class="adapter-card gui-adapter"><code>adapters/ew/binding.c</code><p>把共享 ViewModel 映射为 Embedded Wizard 属性和事件。</p></div>
+          </section>
+
+          <section class="contract-core">
+            <div class="column-head"><span class="panel-label">STABLE C CONTRACT</span><h3>ports/*.h</h3><p>上层只看能力，不知道运行在哪个 RTOS。</p></div>
+            <div class="contract-list">
+              <article class="contract"><h4>storage_port</h4><p>参数、日志、资源的键值与块访问。</p></article>
+              <article class="contract"><h4>transport_port</h4><p>本地消息或 RT1046—F133 USB 通道。</p></article>
+              <article class="contract"><h4>time_port</h4><p>单调时钟、时间戳、周期时间基准。</p></article>
+              <article class="contract"><h4>device_port</h4><p>传感器、CAN、BLE、4G、Wi-Fi 能力。</p></article>
+              <article class="contract"><h4>event_port</h4><p>组件间事件发布与订阅。</p></article>
+              <article class="contract"><h4>power_device_port</h4><p>平台电源动作、唤醒原因和准备状态。</p></article>
+              <article class="contract"><h4>gui_binding_port</h4><p>ViewModel 快照输出与 Action 输入。</p></article>
+              <article class="contract reserved"><h4>update_port</h4><p>RT1046 固件 / F133 应用 / GUI 资源三类接口位置。</p></article>
+            </div>
+            <pre class="code-contracts"><code>int app_action_dispatch(const app_action_t *action);
+int app_state_snapshot(app_state_snapshot_t *out);
+int storage_write(storage_key_t key, const void *data, size_t size);
+int transport_send(transport_channel_t channel, const void *data, size_t size);</code></pre>
+          </section>
+
+          <section class="platform-column">
+            <div class="column-head"><span class="panel-label">RIGHT TARGET</span><h3>Melis / RT-Thread</h3><p>F133 GUI 与大资源侧</p></div>
+            <div class="adapter-card"><code>adapters/melis/storage.c</code><p>eMMC、地图、语音、GUI 资源与非权威缓存。</p></div>
+            <div class="adapter-card"><code>adapters/melis/transport.c</code><p>F133 USB Host、状态镜像和 Action Proxy。</p></div>
+            <div class="adapter-card"><code>adapters/melis/device.c</code><p>Wi-Fi、大文件、外接 U 盘与语音输出。</p></div>
+            <div class="adapter-card"><code>adapters/melis/power_device.c</code><p>显示关断、资源静默、子系统挂起与唤醒。</p></div>
+            <div class="adapter-card gui-adapter"><code>adapters/lvgl/binding.c</code><p>把共享 ViewModel 映射为 LVGL 控件和事件。</p></div>
+          </section>
+        </div>
+
+        <div class="usb-boundary">
+          <article class="chip-card"><span class="panel-label">GUI / RESOURCE SIDE</span><strong>F133 · USB Host</strong><p>状态镜像、ViewModel、Action Proxy、LVGL、Wi-Fi、eMMC、语音输出。</p></article>
+          <div class="wire"><span>versioned state<br>event / action / result</span></div>
+          <article class="chip-card"><span class="panel-label">REAL-TIME / AUTHORITY</span><strong>RT1046 · 权威状态</strong><p>1 kHz 采集与运算、参数校验、Flash、CAN、开关机与低功耗状态。</p></article>
+        </div>
+        <div class="boundary-note"><b>边界原则：</b> USB 是数据契约边界，不模拟跨芯片函数调用。消息携带协议版本、请求编号、状态版本和时间戳；链路断开时，F133 明确显示 stale/disconnected，不把缓存冒充权威状态。</div>
+
+        <div class="power-map" aria-label="双电源状态机协作">
+          <article class="power-role">
+            <span class="panel-label">RT1046 / AUTHORITY</span>
+            <h3>整机电源状态机</h3>
+            <code>app/system_lifecycle/system_power_sm.c</code>
+            <p>决定整机能否休眠或彻底断电；聚合车辆、传感器、链路和 F133 的准备结果。</p>
+            <div class="state-tags"><span>OFF</span><span>BOOTING</span><span>ACTIVE</span><span>IDLE</span><span>SLEEP_PREPARE</span><span>SLEEP</span><span>BLE_WAKE</span><span>SHUTDOWN_PREPARE</span><span>FAULT</span></div>
+          </article>
+          <article class="power-contract">
+            <span class="panel-label">SHARED COORDINATION</span>
+            <h3>粗粒度协作契约</h3>
+            <code>components/power/power_contract.h</code>
+            <p><code>power_coordination.c</code> 只同步跨芯片阶段，不强迫两侧内部状态一一对应。</p>
+            <div class="state-tags"><span>RUNNING</span><span>PREPARE_SLEEP</span><span>READY_FOR_SLEEP</span><span>SLEEPING</span><span>WAKE_REQUEST</span><span>WAKING</span><span>PREPARE_SHUTDOWN</span><span>READY_FOR_POWER_CUT</span><span>FAILED</span></div>
+          </article>
+          <article class="power-role">
+            <span class="panel-label">F133 / GUI SUBSYSTEM</span>
+            <h3>GUI 子系统状态机</h3>
+            <code>app/gui_lifecycle/gui_power_sm.c</code>
+            <p>管理显示、LVGL、Wi-Fi、地图、语音和 eMMC 资源；向 RT1046 报告是否可休眠或断电。</p>
+            <div class="state-tags"><span>OFF</span><span>BOOTING</span><span>GUI_ACTIVE</span><span>DISPLAY_DIM</span><span>DISPLAY_OFF</span><span>QUIESCING</span><span>SUSPENDED</span><span>WAKING</span><span>RESOURCE_BUSY</span><span>FAULT</span></div>
+          </article>
+        </div>
+        <div class="boundary-note"><b>电源职责：</b> RT1046 保持整机状态权威；F133 对 GUI 子系统资源拥有本地决策权。两套状态机通过 <code>power_contract</code> 协作，而不是复制成同一张状态表。</div>
+      </section>
+
+      <section class="view" data-view="flows" role="tabpanel" hidden>
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Concrete business walkthrough</div>
+            <h2>用具体业务验证公版边界</h2>
+            <p>同一组共享模型、状态、动作和 ViewModel，在单芯片与双芯片项目中使用不同部署路径，但不复制业务定义。</p>
+          </div>
+          <div class="flow-switcher" aria-label="业务流程选择">
+            <button class="flow-switch" type="button" data-flow-target="imu" aria-pressed="true">IMU 实时数据</button>
+            <button class="flow-switch" type="button" data-flow-target="assist" aria-pressed="false">助力参数设置</button>
+            <button class="flow-switch" type="button" data-flow-target="power" aria-pressed="false">双芯片电源协作</button>
+          </div>
+        </div>
+
+        <div class="flow-panel" data-flow="imu">
+          <section class="flow-board">
+            <div class="flow-head"><div><h3>IMU：实时链与显示链解耦</h3><p>相同 sensor_hub / motion_fusion / ride / viewmodel 组件适用于 RT1172 与 RT1046。</p></div><span class="rate-badge">SOURCE · 1 kHz</span></div>
+            <div class="flow-lane">
+              <div class="lane-label">REAL-TIME<br>RT1172 / RT1046</div>
+              <div class="steps">
+                <article class="step platform-step"><b>01 / DRIVER</b><strong>IMU Driver / DMA</strong><small>中断与 DMA 只进入设备适配层</small></article>
+                <article class="step"><b>02 / SENSOR</b><strong>1 kHz Acquisition</strong><small>components/sensor_hub 统一样本格式</small></article>
+                <article class="step"><b>03 / ALGO</b><strong>Filter / Fusion</strong><small>滤波、姿态与业务计算</small></article>
+                <article class="step"><b>04 / STATE</b><strong>Domain State</strong><small>权威状态更新并增加版本</small></article>
+                <article class="step"><b>05 / VM</b><strong>降频 ViewModel</strong><small>按展示节拍形成快照</small></article>
+                <article class="step gui-step"><b>06 / VIEW</b><strong>EW 本地绑定</strong><small>EB100 / EB400 直接消费</small></article>
+              </div>
+            </div>
+            <div class="flow-lane">
+              <div class="lane-label">EB500 GUI<br>F133 / LVGL</div>
+              <div class="steps">
+                <article class="step platform-step"><b>01 / SYNC</b><strong>State Delta</strong><small>仅发送降频结果与事件</small></article>
+                <article class="step platform-step"><b>02 / USB</b><strong>transport_port</strong><small>版本、序号、时间戳</small></article>
+                <article class="step"><b>03 / MIRROR</b><strong>State Mirror</strong><small>F133 非权威状态镜像</small></article>
+                <article class="step"><b>04 / VM</b><strong>共享 ViewModel</strong><small>与 EW 使用相同字段语义</small></article>
+                <article class="step gui-step"><b>05 / BIND</b><strong>LVGL Binding</strong><small>平台对象停留在 adapter</small></article>
+                <article class="step gui-step"><b>06 / VIEW</b><strong>LVGL View</strong><small>约 30 fps 独立刷新</small></article>
+              </div>
+            </div>
+          </section>
+          <div class="flow-callouts">
+            <article class="callout"><b>DATA BOUNDARY</b><p>1 kHz IMU 原始数据不跨 USB；F133 只消费姿态、速度、告警等展示结果。</p></article>
+            <article class="callout"><b>SCHEDULING BOUNDARY</b><p>GUI 约 30 fps 的卡顿或页面切换不得反向阻塞采样与融合线程。</p></article>
+            <article class="callout"><b>REUSE POINT</b><p>样本模型、融合结果、状态字段和 ViewModel 语义来自同一公版仓库。</p></article>
+          </div>
+        </div>
+
+        <div class="flow-panel" data-flow="assist" hidden>
+          <section class="flow-board">
+            <div class="flow-head"><div><h3>助力参数设置：共享 Action，权威侧执行</h3><p>GUI 只表达用户意图；校验、持久化和 CAN 下发都由 RT1172/RT1046 执行。</p></div><span class="rate-badge">ACTION · REQUEST / RESULT</span></div>
+            <div class="flow-lane">
+              <div class="lane-label">EB100 / EB400<br>SINGLE CHIP</div>
+              <div class="steps seven">
+                <article class="step gui-step"><b>01 / VIEW</b><strong>EW 输入</strong><small>用户调整助力参数</small></article>
+                <article class="step"><b>02 / ACTION</b><strong>shared Action</strong><small>稳定 C 数据结构</small></article>
+                <article class="step"><b>03 / SERVICE</b><strong>业务校验</strong><small>范围、状态和权限规则</small></article>
+                <article class="step"><b>04 / STATE</b><strong>权威状态</strong><small>成功后更新版本</small></article>
+                <article class="step platform-step"><b>05 / STORE</b><strong>片内 Flash</strong><small>RT1172 / RT1046 参数区</small></article>
+                <article class="step platform-step"><b>06 / CAN</b><strong>车辆下发</strong><small>经 device_port 适配</small></article>
+                <article class="step gui-step"><b>07 / VM</b><strong>界面刷新</strong><small>结果进入 ViewModel</small></article>
+              </div>
+            </div>
+            <div class="flow-lane">
+              <div class="lane-label">EB500<br>DUAL CHIP</div>
+              <div class="steps seven">
+                <article class="step gui-step"><b>01 / VIEW</b><strong>LVGL 输入</strong><small>相同 Action 定义</small></article>
+                <article class="step platform-step"><b>02 / PROXY</b><strong>Action Proxy</strong><small>生成 request_id</small></article>
+                <article class="step platform-step"><b>03 / USB</b><strong>transport_send</strong><small>F133 Host → RT1046</small></article>
+                <article class="step"><b>04 / HANDLE</b><strong>Action Handler</strong><small>RT1046 权威执行</small></article>
+                <article class="step"><b>05 / COMMIT</b><strong>校验 / Flash / CAN</strong><small>复用单芯片业务代码</small></article>
+                <article class="step platform-step"><b>06 / RESULT</b><strong>结果 + State Delta</strong><small>版本化状态回传</small></article>
+                <article class="step gui-step"><b>07 / VM</b><strong>Mirror → LVGL</strong><small>失败也由结果明确呈现</small></article>
+              </div>
+            </div>
+          </section>
+          <div class="flow-callouts">
+            <article class="callout"><b>AUTHORITY</b><p>助力参数、车辆关键配置和用户设置以 RT1172/RT1046 Flash 为权威副本。</p></article>
+            <article class="callout"><b>PORTABILITY</b><p>换 RTOS 时保留 Action、校验、状态和 ViewModel，只替换 storage / transport / device adapters。</p></article>
+            <article class="callout"><b>NO PROJECT MACRO SPRAWL</b><p>产品差异由装配配置和能力表选择，避免在业务代码中散布 `#if EB100`。</p></article>
+          </div>
+        </div>
+
+        <div class="flow-panel" data-flow="power" hidden>
+          <section class="flow-board">
+            <div class="flow-head"><div><h3>彻底关机：两套状态机，一份协作契约</h3><p>RT1046 决定整机断电；F133 负责把 GUI、文件、Wi-Fi 和语音资源安全收拢。</p></div><span class="rate-badge">HANDSHAKE · VERSIONED</span></div>
+            <div class="flow-lane">
+              <div class="lane-label">RT1046<br>SYSTEM AUTHORITY</div>
+              <div class="steps seven">
+                <article class="step"><b>01 / INTENT</b><strong>Shutdown Request</strong><small>system_power_sm 接收关机意图</small></article>
+                <article class="step"><b>02 / GUARD</b><strong>Policy Check</strong><small>检查车辆 / Charger / 升级状态</small></article>
+                <article class="step platform-step"><b>03 / SYNC</b><strong>PREPARE_SHUTDOWN</strong><small>带 request_id 发往 F133</small></article>
+                <article class="step"><b>04 / WAIT</b><strong>Await GUI Ready</strong><small>超时进入 FAILED 或降级策略</small></article>
+                <article class="step"><b>05 / COMMIT</b><strong>Persist State</strong><small>日志与关键参数落盘</small></article>
+                <article class="step platform-step"><b>06 / DEVICE</b><strong>power_device_port</strong><small>关闭外设与唤醒源配置</small></article>
+                <article class="step platform-step"><b>07 / POWER</b><strong>Power Cut</strong><small>由 RT1046 执行最终断电</small></article>
+              </div>
+            </div>
+            <div class="flow-lane">
+              <div class="lane-label">F133<br>GUI SUBSYSTEM</div>
+              <div class="steps seven">
+                <article class="step platform-step"><b>01 / RECEIVE</b><strong>PREPARE_SHUTDOWN</strong><small>校验协议版本与 request_id</small></article>
+                <article class="step"><b>02 / STATE</b><strong>QUIESCING</strong><small>gui_power_sm 进入本地收拢态</small></article>
+                <article class="step gui-step"><b>03 / UI</b><strong>Stop New Work</strong><small>禁止新地图 / 语音 / 文件任务</small></article>
+                <article class="step"><b>04 / FLUSH</b><strong>Flush Resources</strong><small>eMMC、日志与状态镜像收尾</small></article>
+                <article class="step platform-step"><b>05 / DEVICE</b><strong>power_device_port</strong><small>关闭显示 / Wi-Fi / 音频</small></article>
+                <article class="step"><b>06 / READY</b><strong>READY_FOR_POWER_CUT</strong><small>报告完成，不自行宣告整机关机</small></article>
+                <article class="step"><b>07 / HOLD</b><strong>Wait for Cut</strong><small>保持幂等，可重复应答</small></article>
+              </div>
+            </div>
+          </section>
+          <div class="flow-callouts">
+            <article class="callout"><b>STATE MACHINES</b><p><code>system_power_sm.c</code> 与 <code>gui_power_sm.c</code> 状态集合不同，各自服务本地职责。</p></article>
+            <article class="callout"><b>SHARED CONTRACT</b><p><code>power_contract.h</code> 只定义协作阶段、请求编号、超时和失败结果。</p></article>
+            <article class="callout"><b>OWNERSHIP</b><p>F133 可以拒绝“已准备”并报告 RESOURCE_BUSY；整机是否强制断电仍由 RT1046 策略决定。</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="interfaces" role="tabpanel" hidden>
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Function-to-file trace / Zephyr 3.1</div>
+            <h2>IMU 采样接口如何逐层落位</h2>
+            <p>以 Zephyr 3.1 自带 BMI160 SPI 驱动为可追踪实例，从产品装配、线程创建、DRDY 中断一路跟到 Sensor API、SPI API 与 NXP LPSPI。BMI160 仅用于说明真实调用机制，不代表最终器件选型。</p>
+          </div>
+          <div class="interface-controls">
+            <div class="filter-group" aria-label="调用链选择">
+              <span class="filter-label">TRACE</span>
+              <button class="flow-switch" type="button" data-trace-target="build" aria-pressed="false">Build / Init</button>
+              <button class="flow-switch" type="button" data-trace-target="thread" aria-pressed="false">Thread Start</button>
+              <button class="flow-switch" type="button" data-trace-target="trigger" aria-pressed="false">DRDY Trigger</button>
+              <button class="flow-switch" type="button" data-trace-target="read" aria-pressed="true">Read Sample</button>
+            </div>
+            <div class="filter-group" aria-label="接口平台选择">
+              <span class="filter-label">PLATFORM</span>
+              <button class="filter" type="button" data-interface-platform="zephyr" aria-pressed="true">Zephyr 3.1</button>
+              <button class="filter" type="button" data-interface-platform="melis" aria-pressed="false">Melis</button>
+            </div>
+          </div>
+        </div>
+
+        <section class="interface-trace" data-interface-trace="build" hidden>
+          <div class="trace-title"><div><h3>Build / Init：配置如何变成 Zephyr Sensor Device</h3><p>编译期生成 device 实例；启动期把 <code>bmi160_api</code> 放进 <code>dev-&gt;api</code>。</p></div><span class="rate-badge">BOOT · ONCE</span></div>
+          <div class="trace-row">
+            <div class="trace-lane">BUILD<br>CONFIG</div>
+            <div class="trace-cards" style="--trace-columns: 5">
+              <article class="trace-card"><b>L7 / PRODUCT</b><code>product.conf</code><small>CONFIG_SENSOR / SPI / BMI160 / TRIGGER</small></article>
+              <article class="trace-card hardware-card"><b>L1 / BOARD</b><code>eb500_rt.overlay</code><small>imu0: bmi160@0 挂到 &amp;lpspi1</small></article>
+              <article class="trace-card platform-card"><b>ZEPHYR BUILD</b><code>DT_DRV_COMPAT</code><small>匹配 bosch,bmi160 binding</small></article>
+              <article class="trace-card platform-card"><b>DEVICE MODEL</b><code>DEVICE_DT_INST_DEFINE</code><small>生成 struct device 与初始化条目</small></article>
+              <article class="trace-card platform-card"><b>DRIVER API</b><code>dev-&gt;api = &amp;bmi160_api</code><small>注册 sample_fetch / channel_get / trigger_set</small></article>
+            </div>
+          </div>
+          <div class="trace-row">
+            <div class="trace-lane">POST_KERNEL<br>INIT</div>
+            <div class="trace-cards" style="--trace-columns: 4">
+              <article class="trace-card platform-card"><b>SENSOR INIT</b><code>bmi160_init(dev)</code><small>CONFIG_SENSOR_INIT_PRIORITY</small></article>
+              <article class="trace-card platform-card"><b>BUS CHECK</b><code>spi_is_ready()</code><small>验证 LPSPI Device 已初始化</small></article>
+              <article class="trace-card platform-card"><b>TRIGGER INIT</b><code>bmi160_trigger_mode_init()</code><small>配置 INT1 GPIO 与处理线程</small></article>
+              <article class="trace-card"><b>APP ADAPTER</b><code>DEVICE_DT_GET(imu0)</code><small>取得同一个 Zephyr device 实例</small></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="interface-trace" data-interface-trace="thread" hidden>
+          <div class="trace-title"><div><h3>Thread Start：公版组件怎样创建 Zephyr 线程</h3><p><code>sensor_hub.c</code> 只依赖 OSAL；只有 Zephyr adapter 能看到 <code>k_thread_create()</code>。</p></div><span class="rate-badge">START · ONCE</span></div>
+          <div class="trace-row">
+            <div class="trace-lane">PUBLIC →<br>ZEPHYR</div>
+            <div class="trace-cards" style="--trace-columns: 6">
+              <article class="trace-card"><b>L7 / PRODUCT</b><code>main()</code><small>products/eb500_rt/main.c</small></article>
+              <article class="trace-card"><b>L5 / APP</b><code>app_runtime_start()</code><small>app/core/app_runtime.c</small></article>
+              <article class="trace-card"><b>L4 / COMPONENT</b><code>sensor_hub_start()</code><small>components/sensor_hub/sensor_hub.c</small></article>
+              <article class="trace-card"><b>L3 / OSAL</b><code>os_thread_create()</code><small>ports/os/os_thread.h</small></article>
+              <article class="trace-card platform-card"><b>L2 / ADAPTER</b><code>k_thread_create()</code><small>adapters/zephyr/os/os_thread.c</small></article>
+              <article class="trace-card"><b>WORKER</b><code>sensor_hub_worker()</code><small>开始等待 IMU 数据就绪</small></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="interface-trace" data-interface-trace="trigger" hidden>
+          <div class="trace-title"><div><h3>DRDY Trigger：中断怎样唤醒公版采样线程</h3><p>SPI 读取不在 GPIO ISR 中执行；Zephyr Sensor Driver 先把中断转到线程/work，再调用注册的 handler。</p></div><span class="rate-badge">IRQ · 1 kHz SOURCE</span></div>
+          <div class="trace-row">
+            <div class="trace-lane">REGISTER<br>HANDLER</div>
+            <div class="trace-cards" style="--trace-columns: 5">
+              <article class="trace-card"><b>L2 / ADAPTER</b><code>imu_device_open()</code><small>DEVICE_DT_GET + device_is_ready</small></article>
+              <article class="trace-card platform-card"><b>ZEPHYR SENSOR</b><code>sensor_attr_set()</code><small>设置 SENSOR_ATTR_SAMPLING_FREQUENCY</small></article>
+              <article class="trace-card platform-card"><b>ZEPHYR SENSOR</b><code>sensor_trigger_set()</code><small>注册 DATA_READY handler</small></article>
+              <article class="trace-card platform-card"><b>API DISPATCH</b><code>dev-&gt;api-&gt;trigger_set()</code><small>进入 bmi160_trigger_set()</small></article>
+              <article class="trace-card platform-card"><b>GPIO SETUP</b><code>gpio_pin_interrupt_configure_dt()</code><small>INT1 edge-to-active</small></article>
+            </div>
+          </div>
+          <div class="trace-row">
+            <div class="trace-lane">RUNTIME<br>WAKE</div>
+            <div class="trace-cards" style="--trace-columns: 6">
+              <article class="trace-card hardware-card"><b>HARDWARE</b><code>IMU DRDY</code><small>INT1 引脚产生边沿</small></article>
+              <article class="trace-card platform-card"><b>GPIO ISR</b><code>bmi160_gpio_callback()</code><small>ISR 中只 give semaphore / submit work</small></article>
+              <article class="trace-card platform-card"><b>DRIVER THREAD</b><code>bmi160_handle_interrupts()</code><small>在线程上下文读取中断状态</small></article>
+              <article class="trace-card platform-card"><b>APP CALLBACK</b><code>imu_zephyr_drdy_handler()</code><small>adapter 接收 Sensor trigger</small></article>
+              <article class="trace-card platform-card"><b>OS SYNC</b><code>k_sem_give(&amp;sample_ready)</code><small>唤醒公版等待接口</small></article>
+              <article class="trace-card"><b>L4 / COMPONENT</b><code>imu_device_wait_data_ready()</code><small>sensor_hub_worker 继续执行</small></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="interface-trace" data-interface-trace="read">
+          <div class="trace-title"><div><h3>Read Sample：从公版 HAL 调到 Zephyr Sensor，再调到 SPI</h3><p>两次 <code>dev-&gt;api</code> 分发分别选择“具体 Sensor Driver”和“具体 SPI Controller Driver”。</p></div><span class="rate-badge">RUNTIME · PER SAMPLE/BATCH</span></div>
+          <div class="trace-row">
+            <div class="trace-lane">CALL DOWN<br>FETCH</div>
+            <div class="trace-cards" style="--trace-columns: 6">
+              <article class="trace-card"><b>L4 / COMPONENT</b><code>sensor_hub_worker()</code><small>公共采样调度</small></article>
+              <article class="trace-card"><b>L3 / DEVICE HAL</b><code>imu_device_read_batch()</code><small>ports/device/imu_device.h</small></article>
+              <article class="trace-card platform-card"><b>L2 / ADAPTER</b><code>sensor_sample_fetch()</code><small>adapters/zephyr/device/imu_device.c</small></article>
+              <article class="trace-card platform-card"><b>ZEPHYR SENSOR.H</b><code>z_impl_sensor_sample_fetch()</code><small>取得 struct sensor_driver_api</small></article>
+              <article class="trace-card platform-card"><b>DISPATCH #1</b><code>dev-&gt;api-&gt;sample_fetch()</code><small>bmi160_api.sample_fetch</small></article>
+              <article class="trace-card hardware-card"><b>BMI160 DRIVER</b><code>bmi160_sample_fetch()</code><small>状态检查 + burst read</small></article>
+            </div>
+          </div>
+          <div class="trace-row">
+            <div class="trace-lane">CALL DOWN<br>SPI</div>
+            <div class="trace-cards" style="--trace-columns: 6">
+              <article class="trace-card hardware-card"><b>BMI160 BUS</b><code>bmi160_read_spi()</code><small>组装寄存器地址和 spi_buf_set</small></article>
+              <article class="trace-card platform-card"><b>ZEPHYR SPI.H</b><code>spi_transceive_dt()</code><small>从 spi_dt_spec 取 bus/config</small></article>
+              <article class="trace-card platform-card"><b>SPI CORE</b><code>spi_transceive()</code><small>取得 struct spi_driver_api</small></article>
+              <article class="trace-card platform-card"><b>DISPATCH #2</b><code>dev-&gt;api-&gt;transceive()</code><small>spi_mcux_driver_api.transceive</small></article>
+              <article class="trace-card platform-card"><b>MCUX LPSPI</b><code>spi_mcux_transceive()</code><small>选择 transceive_dma 或 IRQ 路径</small></article>
+              <article class="trace-card hardware-card"><b>NXP SDK / HW</b><code>LPSPI_MasterTransferNonBlocking()</code><small>或 LPSPI_EnableDMA + dma_start</small></article>
+            </div>
+          </div>
+          <div class="trace-row">
+            <div class="trace-lane">RETURN UP<br>CHANNELS</div>
+            <div class="trace-cards" style="--trace-columns: 5">
+              <article class="trace-card platform-card"><b>ZEPHYR SENSOR</b><code>sensor_channel_get()</code><small>ACCEL_XYZ / GYRO_XYZ</small></article>
+              <article class="trace-card platform-card"><b>DISPATCH #1</b><code>dev-&gt;api-&gt;channel_get()</code><small>bmi160_api.channel_get</small></article>
+              <article class="trace-card hardware-card"><b>BMI160 DRIVER</b><code>bmi160_channel_get()</code><small>raw → struct sensor_value</small></article>
+              <article class="trace-card"><b>L2 / ADAPTER</b><code>sensor_value → imu_sample_t</code><small>Zephyr 类型在此终止</small></article>
+              <article class="trace-card"><b>L4 / ALGORITHM</b><code>motion_fusion_push()</code><small>公共算法消费稳定样本</small></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="interface-matrix" aria-label="IMU接口层级和文件落位">
+          <div class="matrix-head"><span>LAYER</span><span>FILE / OWNER</span><span>FUNCTIONS / RESPONSIBILITY</span></div>
+          <article class="interface-node" data-interface-node="public-sensor-hub" data-interface-scope="public"><strong>L4 · PUBLIC COMPONENT</strong><code>components/sensor_hub/sensor_hub.c</code><p><code>sensor_hub_start()</code> / <code>sensor_hub_worker()</code>：线程调度、等待样本、转交算法；不知道 Zephyr device 和 SPI。</p></article>
+          <article class="interface-node" data-interface-node="public-imu-port" data-interface-scope="public"><strong>L3 · DEVICE HAL</strong><code>ports/device/imu_device.h</code><p><code>imu_device_open()</code> / <code>imu_device_wait_data_ready()</code> / <code>imu_device_read_batch()</code>：公版语义接口。</p></article>
+          <article class="interface-node platform-node" data-interface-node="zephyr-adapter" data-interface-scope="zephyr"><strong>L2 · ZEPHYR ADAPTER</strong><code>adapters/zephyr/device/imu_device.c</code><p><code>DEVICE_DT_GET()</code>、<code>sensor_trigger_set()</code>、<code>sensor_sample_fetch()</code>、<code>sensor_channel_get()</code>；完成 <code>sensor_value</code> 转换。</p></article>
+          <article class="interface-node platform-node" data-interface-node="zephyr-sensor-api" data-interface-scope="zephyr"><strong>ZEPHYR SENSOR API</strong><code>include/zephyr/drivers/sensor.h</code><p><code>z_impl_sensor_sample_fetch()</code> → <code>dev-&gt;api-&gt;sample_fetch()</code>；<code>z_impl_sensor_channel_get()</code> → <code>dev-&gt;api-&gt;channel_get()</code>。</p></article>
+          <article class="interface-node hardware-node" data-interface-node="zephyr-bmi160-driver" data-interface-scope="zephyr"><strong>ZEPHYR SENSOR DRIVER</strong><code>drivers/sensor/bmi160/bmi160.c<br>drivers/sensor/bmi160/bmi160_trigger.c</code><p><code>bmi160_sample_fetch()</code>、<code>bmi160_channel_get()</code>、<code>bmi160_gpio_callback()</code>；真实器件协议示例。</p></article>
+          <article class="interface-node platform-node" data-interface-node="zephyr-spi-api" data-interface-scope="zephyr"><strong>ZEPHYR SPI API</strong><code>include/zephyr/drivers/spi.h</code><p><code>spi_transceive_dt()</code> → <code>spi_transceive()</code> → <code>spi_driver_api.transceive</code>。</p></article>
+          <article class="interface-node hardware-node" data-interface-node="zephyr-mcux-driver" data-interface-scope="zephyr"><strong>NXP LPSPI DRIVER</strong><code>drivers/spi/spi_mcux_lpspi.c</code><p><code>spi_mcux_transceive()</code>、<code>transceive_dma()</code>、<code>LPSPI_MasterTransferNonBlocking()</code>。</p></article>
+          <article class="interface-node platform-node" data-interface-node="melis-adapter" data-interface-scope="melis"><strong>L2 · MELIS ADAPTER</strong><code>adapters/melis/device/imu_device.c</code><p>实现同一份 <code>imu_device.h</code>。正式 Sensor API、线程和句柄类型需要依据授权 Melis SDK 落实。</p></article>
+          <article class="interface-node hardware-node" data-interface-node="melis-sensor-api" data-interface-scope="melis"><strong>MELIS DRIVER / SPI</strong><code>Melis SDK · exact path pending</code><p>替换 Zephyr Sensor、BMI160 与 SPI controller 三行职责；不改变公共组件和 HAL。</p></article>
+          <article class="interface-node hardware-node" data-interface-node="hardware-imu" data-interface-scope="hardware"><strong>L1 · BSP / HARDWARE</strong><code>boards/nxp/eb500_rt.overlay · LPSPI · IMU</code><p>DTS提供总线、片选、频率、INT GPIO和DMA资源；最终器件型号及频率参数由项目确认。</p></article>
+          <article class="interface-node" data-interface-node="public-fusion" data-interface-scope="public"><strong>L4 · PUBLIC ALGORITHM</strong><code>components/motion_fusion/motion_fusion.c</code><p><code>motion_fusion_push(const imu_sample_t *)</code>：消费稳定公版数据；1 kHz 原始数据留在 RT1172/RT1046。</p></article>
+        </section>
+
+        <div class="interface-code-grid">
+          <pre class="code-contracts"><code>/* ports/device/imu_device.h — public C contract */
+int imu_device_wait_data_ready(uint32_t timeout_us);
+
+int imu_device_read_batch(imu_sample_t *samples,
+                          size_t capacity,
+                          size_t *sample_count);</code></pre>
+          <pre class="code-contracts"><code>/* adapters/zephyr/device/imu_device.c — platform only */
+sensor_sample_fetch(imu_dev);
+sensor_channel_get(imu_dev, SENSOR_CHAN_ACCEL_XYZ, accel);
+sensor_channel_get(imu_dev, SENSOR_CHAN_GYRO_XYZ, gyro);
+/* struct sensor_value -> imu_sample_t */</code></pre>
+        </div>
+
+        <div class="boundary-note interface-warning"><b>1 kHz 边界：</b> Zephyr 3.1 BMI160 的 <code>bmi160_sample_fetch()</code> 是真实的 Sensor → SPI 调用示例，但其单次 burst read 不能证明已经满足本项目的 1 kHz FIFO 指标。正式驱动需要按最终 IMU 验证 DRDY、FIFO 批量读取、线程时延，并开启或验证 <code>CONFIG_SPI_MCUX_LPSPI_DMA</code>。</div>
+      </section>
+    </main>
+
+    <footer class="page-foot"><span>SOFTWARE PUBLIC · ARCHITECTURE EXPLORER · 2026-08-17</span><span>讨论稿：目录与接口边界尚未冻结，不代表硬件验证完成。</span></footer>
+  </div>
+
+  <script>
+    const nodeDetails = {
+      'product-eb500-gui': ['products/eb500_gui/product.conf', '选择 EB500 GUI 侧的公版能力、Melis 适配与 LVGL 页面。', 'EB500 / F133', '只做能力选择，不复制公共业务代码。', '产品配置变化'],
+      'app-core': ['app/core', '提供纯 C 领域类型、Action、结果和应用运行骨架。', '全部产品', '不得依赖 RTOS、芯片或 GUI 私有类型。', '原则上不变'],
+      'app-system-lifecycle': ['app/system_lifecycle', '维护 RT1172/RT1046 的整机运行与电源状态机。', 'EB100 / EB400 / EB500 RT', '整机状态权威在此；通过 power_contract 与 GUI 子系统协作。', '原则上不变，平台动作由 port 吸收'],
+      'app-gui-lifecycle': ['app/gui_lifecycle', '维护 F133 的 GUI 子系统电源和资源状态机。', 'EB500 GUI / F133', '可以管理本地资源，但不替代 RT1046 的整机状态权威。', '原则上不变，平台动作由 port 吸收'],
+      'app-ride': ['app/ride', '组织骑行会话、里程、速度和派生状态。', 'EB100 / EB400 / EB500 RT', '消费组件结果，不直接操作传感器驱动。', '原则上不变'],
+      'app-vehicle': ['app/vehicle', '组织车辆状态、助力参数和 CAN 用例。', 'EB100 / EB400 / EB500 RT', '关键参数由权威侧校验和持久化。', '原则上不变'],
+      'app-settings': ['app/settings', '组织用户设置、校验和提交结果。', '按产品装配', '通过 config_store 与 storage port 持久化。', '原则上不变'],
+      'app-navigation': ['app/navigation', '组织导航状态、地图资源和语音提示动作。', '当前 EB500 GUI', '通过定位、资源和语音组件组合，不依赖 LVGL 对象。', '能力选择变化'],
+      'app-connectivity': ['app/connectivity', '组织 BLE App、4G 服务端和 Wi-Fi 文件用例。', '按产品角色装配', '不得直接依赖模组 SDK。', '设备 adapter 变化'],
+      'app-data-export': ['app/data_export', '组织日志导出、U 盘访问和大文件传输用例。', '按产品装配', '通过 logging、file_transfer 与 storage port 工作。', '存储 adapter 变化'],
+      'app-diagnostics': ['app/diagnostics', '聚合设备健康、错误和状态变更事件。', '按产品装配', '输出结构化诊断，不绑定具体日志后端。', '后端 adapter 变化'],
+      'app-update': ['app/update', '为固件、F133 应用和 GUI 资源升级保留用例入口。', '全部产品候选', '本阶段不定义升级流程和回滚策略。', '接口位置保留'],
+      'component-sensor-hub': ['components/sensor_hub', '统一 IMU、气压计、指南针、GPS、光感等采集模型与调度。', 'EB100 / EB400 / EB500 RT', '源码可在 Zephyr 或 Melis 编译，产品配置决定是否启用。', '驱动 adapter 变化'],
+      'component-motion-fusion': ['components/motion_fusion', '执行高频滤波、融合和派生数据计算。', '当前 RT1172 / RT1046', '1 kHz 原始数据不跨 USB。', '算法通常不变'],
+      'component-positioning': ['components/positioning', '统一定位、轨迹和导航位置语义。', '按产品角色装配', '定位源通过 device port 提供。', '设备 adapter 变化'],
+      'component-environment': ['components/environment', '统一气压、光照和方向等环境数据。', '当前实时侧', '不持有传感器驱动句柄。', '驱动 adapter 变化'],
+      'component-vehicle-bus': ['components/vehicle_bus', '提供 CAN 车辆协议与助力参数能力。', '当前实时侧', '总线收发通过 device port。', 'CAN adapter 变化'],
+      'component-power': ['components/power', '定义跨平台电源模型、协作阶段与幂等握手。', 'EB100 / EB400 / EB500 两侧', '不包含 Zephyr/Melis 电源 API；两侧应用状态机允许不同。', 'power_device adapter 变化'],
+      'component-config-store': ['components/config_store', '统一参数 schema、版本、默认值和校验。', '按产品装配', '持久化通过 storage port。', '存储 adapter 变化'],
+      'component-state-sync': ['components/state_sync', '维护 EB500 状态镜像、Action、结果和版本一致性。', 'EB500 RT / GUI', 'RT1046 为关键状态权威，F133 镜像需标记新鲜度。', 'transport adapter 变化'],
+      'component-logging': ['components/logging', '生成结构化状态变更和基础传感器日志。', '按产品装配', '记录模型公版，存储与导出通过 ports。', '后端 adapter 变化'],
+      'component-file-transfer': ['components/file_transfer', '管理 USB/Wi-Fi 文件会话、进度和取消。', '按产品装配', '不直接依赖文件系统和网络 SDK。', 'adapter 变化'],
+      'component-resource-manager': ['components/resource_manager', '管理地图、GUI 和语音资源的版本及占用状态。', '当前 EB500 GUI', '资源状态可参与 GUI 电源状态机的关机守卫。', '存储 adapter 变化'],
+      'component-voice-player': ['components/voice_player', '管理语音提示队列、优先级和播放结果。', '当前 EB500 GUI', '只定义输出行为，不包含语音输入。', '音频 adapter 变化'],
+      'component-update-endpoint': ['components/update_endpoint', '为各升级对象提供统一端点位置。', '按升级对象装配', '本阶段只表达边界。', '后续实现'],
+      'port-power': ['ports/power_device.h', '定义休眠、断电、唤醒源和准备结果的稳定 C 接口。', 'Zephyr / Melis', '平台私有电源类型不得越过此接口。', '替换 adapters/zephyr 或 adapters/melis 实现'],
+      'product-eb100': ['products/eb100', '选择 EB100 能力、RT1172 目标与 Embedded Wizard 装配。', 'EB100 / RT1172', '只引用公版模块和适配实现，不放业务逻辑。', '产品配置变化'],
+      'product-eb400': ['products/eb400', '选择 EB400 能力、RT1046 目标与 SPI 小屏装配。', 'EB400 / RT1046', '屏幕差异通过配置和 GUI View 表达。', '产品配置变化'],
+      'product-eb500-rt': ['products/eb500_rt', '装配 EB500 实时侧：主状态、传感、车辆与电源。', 'EB500 / RT1046', '不依赖 F133 GUI 对象；通过 transport port 发布状态。', '产品配置变化'],
+      'product-eb500-f133': ['products/eb500_f133', '装配 EB500 GUI 侧：状态镜像、LVGL、Wi-Fi 与资源。', 'EB500 / F133', '不得成为车辆关键状态的权威源。', '产品配置变化'],
+      'gui-ew': ['gui/embedded_wizard', '实现 EB100、EB400 的 Embedded Wizard 页面。', 'EB100 / EB400', '只依赖 gui_binding 和共享 ViewModel。', 'GUI 重做'],
+      'gui-lvgl': ['gui/lvgl', '实现 EB500 的 LVGL 页面与触摸交互。', 'EB500 / F133', '只依赖 gui_binding 和共享 ViewModel。', 'GUI 重做'],
+      'app-model': ['app/model', '定义跨项目、跨芯片的领域数据结构。', '全部项目', '保持纯 C；禁止出现 RTOS、GUI、芯片私有类型。', '原则上不变'],
+      'app-state': ['app/state', '维护主状态、状态版本和一致性边界。', 'EB100 / EB400 / EB500 RT1046', '不得依赖 GUI 或 RTOS 私有类型。', '原则上不变；由 ports 与 adapters 吸收差异。'],
+      'app-actions': ['app/actions', '定义用户或系统动作、结果和请求编号。', '全部项目；EB500 两侧共享定义', '动作表达意图，不直接调用 GUI 或驱动。', '原则上不变'],
+      'app-services': ['app/services', '编排业务规则、参数校验和状态转换。', 'RT1172 / RT1046 权威侧', '通过组件和 ports 使用能力。', '原则上不变'],
+      'app-viewmodel': ['app/viewmodel', '把状态转换为 EW/LVGL 可消费的稳定快照。', '全部 GUI 目标', '不持有 GUI 对象；EB500 可基于状态镜像运行。', '原则上不变'],
+      'component-sensor': ['components/sensor', '统一 IMU、气压计、指南针、GPS、光感等采集模型。', 'RT1172 / RT1046', '通过 device/time/event ports 获取平台能力。', '驱动适配变化'],
+      'component-fusion': ['components/fusion', '执行高频滤波、融合和派生数据计算。', 'RT1172 / RT1046', '1 kHz 原始数据不得送入 F133。', '算法通常不变'],
+      'component-vehicle': ['components/vehicle', '管理车辆状态、助力参数和 CAN 业务。', 'RT1172 / RT1046', '车辆关键参数由权威侧校验和持久化。', 'CAN adapter 变化'],
+      'component-connect': ['components/connectivity', '抽象 BLE App、4G 服务端、Wi-Fi 大文件能力。', '按项目角色装配', '业务不直接依赖模组 SDK。', '设备 adapter 变化'],
+      'component-log': ['components/logging', '生成结构化状态变更和基础传感器日志。', '按项目角色装配', '记录模型公版，存储与导出通过 ports。', '后端 adapter 变化'],
+      'component-update': ['components/update', '为三类升级对象保留应用模块位置。', 'RT1046 / F133', '本阶段不定义升级流程、回滚或断电保护。', '接口位置保留'],
+      'port-storage': ['ports/storage', '定义 Flash、eMMC、U 盘访问的稳定 C 契约。', 'Zephyr / Melis', '接口不暴露文件系统或驱动私有句柄。', '替换实现'],
+      'port-transport': ['ports/transport', '定义本地消息与 RT1046—F133 USB 数据通道。', 'EB500 两侧', '传递版本化数据，不传指针或 RTOS 句柄。', '替换协议适配'],
+      'port-time': ['ports/time', '提供单调时钟、时间戳和周期时间基准。', '全部目标', '上层不读取平台 tick 类型。', '替换实现'],
+      'port-device': ['ports/device', '统一传感器、CAN、BLE、4G、Wi-Fi 等设备能力。', '按项目装配', '能力接口与设备实例实现分离。', '替换驱动适配'],
+      'port-event': ['ports/event', '提供组件之间的稳定事件发布与订阅。', '全部目标', '事件结构为纯 C 数据，所有权明确。', '替换队列实现'],
+      'port-gui': ['ports/gui_binding', '输出 ViewModel 快照并接收 Action。', 'EW / LVGL', '禁止上层持有 EW 或 LVGL 对象。', '替换 GUI binding'],
+      'port-update': ['ports/update', '定义三类升级对象的发现、写入与状态接口位置。', 'RT1046 / F133', '本阶段只表达边界，不定义机制。', '后续实现'],
+      'adapter-zephyr': ['adapters/zephyr', '用 Zephyr 3.1 实现公共 OS、存储、设备与传输接口。', 'RT1172 / RT1046', 'Zephyr 私有类型不得越过 ports。', '换 RTOS 时替换'],
+      'adapter-melis': ['adapters/melis', '用 Melis/RT-Thread 实现 F133 公共接口。', 'F133', 'Melis 私有类型不得越过 ports。', '换 RTOS 时替换'],
+      'adapter-ew': ['adapters/ew', '把共享 ViewModel/Action 映射到 Embedded Wizard。', 'EB100 / EB400', '只做映射，不复制业务规则。', '换 GUI 框架时替换'],
+      'adapter-lvgl': ['adapters/lvgl', '把共享 ViewModel/Action 映射到 LVGL。', 'EB500 / F133', '只做映射，不复制业务规则。', '换 GUI 框架时替换'],
+      'board-nxp': ['boards/nxp', '承载 RT1172、RT1046 板级和启动配置。', 'EB100 / EB400 / EB500 RT', '不放业务状态机。', '板级变化'],
+      'board-f133': ['boards/allwinner', '承载 F133 板级、Melis 配置与启动链集成。', 'EB500 / F133', '量产时替换为授权完整 SDK。', '板级变化'],
+      'drivers': ['drivers/', '实现 IMU、CAN、USB、显示和触摸等设备驱动。', '按硬件目标', '驱动通过 adapter/port 提供能力。', '换器件时变化'],
+      'hardware': ['hardware', 'RT1172、RT1046、F133 与外围器件。', '全部项目', '物理接口不应穿透成为业务依赖。', '硬件变化']
+    };
+
+    const relations = {
+      'app-system-lifecycle': ['app-core', 'component-power', 'component-config-store', 'component-state-sync', 'port-power', 'port-event', 'adapter-zephyr'],
+      'app-gui-lifecycle': ['app-core', 'app-viewmodel', 'component-power', 'component-state-sync', 'component-resource-manager', 'component-voice-player', 'port-power', 'adapter-melis'],
+      'component-power': ['app-system-lifecycle', 'app-gui-lifecycle', 'component-state-sync', 'port-power', 'adapter-zephyr', 'adapter-melis'],
+      'component-sensor-hub': ['port-device', 'port-time', 'port-event', 'component-motion-fusion', 'adapter-zephyr', 'drivers'],
+      'app-state': ['app-model', 'app-actions', 'app-services', 'app-viewmodel', 'component-vehicle', 'component-power', 'port-event', 'port-transport'],
+      'app-viewmodel': ['app-core', 'app-ride', 'app-vehicle', 'component-state-sync', 'port-gui', 'adapter-ew', 'adapter-lvgl', 'gui-ew', 'gui-lvgl'],
+      'app-actions': ['gui-ew', 'gui-lvgl', 'port-gui', 'app-services', 'port-transport'],
+      'component-sensor': ['port-device', 'port-time', 'port-event', 'component-fusion', 'adapter-zephyr', 'drivers'],
+      'component-fusion': ['component-sensor', 'app-state', 'app-viewmodel'],
+      'component-vehicle': ['app-actions', 'app-services', 'app-state', 'port-storage', 'port-device'],
+      'port-transport': ['component-state-sync', 'adapter-zephyr', 'adapter-melis', 'product-eb500-rt', 'product-eb500-gui'],
+      'port-gui': ['app-viewmodel', 'app-actions', 'adapter-ew', 'adapter-lvgl'],
+      'adapter-zephyr': ['port-storage', 'port-time', 'port-device', 'port-event', 'port-transport', 'board-nxp'],
+      'adapter-melis': ['port-storage', 'port-time', 'port-device', 'port-event', 'port-transport', 'board-f133']
+    };
+
+    function activateView(viewName) {
+      const allowed = ['overview', 'platform', 'flows', 'interfaces'];
+      const next = allowed.includes(viewName) ? viewName : 'overview';
+      document.querySelectorAll('[data-target]').forEach(button => {
+        button.setAttribute('aria-selected', String(button.dataset.target === next));
+      });
+      document.querySelectorAll('[data-view]').forEach(view => {
+        const active = view.dataset.view === next;
+        view.hidden = !active;
+        view.classList.toggle('is-active', active);
+      });
+      history.replaceState(null, '', `#${next}`);
+    }
+
+    function applyFilter(filterName) {
+      document.querySelectorAll('[data-filter]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.filter === filterName));
+      });
+      document.querySelectorAll('[data-node]').forEach(node => {
+        const tags = (node.dataset.tags || '').split(' ');
+        const publicOnSelectedPlatform = node.dataset.kind === 'public' && ['zephyr', 'melis', 'ew', 'lvgl'].includes(filterName);
+        const match = filterName === 'all' || node.dataset.kind === filterName || publicOnSelectedPlatform || tags.includes(filterName);
+        node.classList.toggle('is-filtered', !match);
+      });
+    }
+
+    function applyProductFilter(productName) {
+      document.querySelectorAll('[data-product-filter]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.productFilter === productName));
+      });
+      document.querySelectorAll('[data-node]').forEach(node => {
+        const products = (node.dataset.products || '').split(' ');
+        const match = productName === 'all-products' || products.includes(productName);
+        node.classList.toggle('is-product-filtered', !match);
+      });
+    }
+
+    let selectedNodeId = null;
+
+    function selectNode(nodeId) {
+      const detail = nodeDetails[nodeId];
+      if (!detail) return;
+      if (selectedNodeId === nodeId) {
+        selectedNodeId = null;
+        document.querySelectorAll('[data-node]').forEach(node => {
+          node.classList.remove('is-selected', 'is-related', 'is-muted');
+        });
+        return;
+      }
+      selectedNodeId = nodeId;
+      const related = new Set([nodeId, ...(relations[nodeId] || [])]);
+      document.querySelectorAll('[data-node]').forEach(node => {
+        node.classList.toggle('is-selected', node.dataset.node === nodeId);
+        node.classList.toggle('is-related', node.dataset.node !== nodeId && related.has(node.dataset.node));
+        node.classList.toggle('is-muted', !related.has(node.dataset.node));
+      });
+      document.getElementById('detail-path').textContent = detail[0];
+      document.getElementById('detail-role').textContent = detail[1];
+      document.getElementById('detail-target').textContent = detail[2];
+      document.getElementById('detail-rule').textContent = detail[3];
+      document.getElementById('detail-impact').textContent = detail[4];
+    }
+
+    function activateFlow(flowName) {
+      document.querySelectorAll('[data-flow-target]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.flowTarget === flowName));
+      });
+      document.querySelectorAll('[data-flow]').forEach(panel => {
+        panel.hidden = panel.dataset.flow !== flowName;
+      });
+    }
+
+    function activateInterfaceTrace(traceName) {
+      const allowed = ['build', 'thread', 'trigger', 'read'];
+      const next = allowed.includes(traceName) ? traceName : 'read';
+      document.querySelectorAll('[data-trace-target]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.traceTarget === next));
+      });
+      document.querySelectorAll('[data-interface-trace]').forEach(panel => {
+        panel.hidden = panel.dataset.interfaceTrace !== next;
+      });
+    }
+
+    function activateInterfacePlatform(platformName) {
+      const next = platformName === 'melis' ? 'melis' : 'zephyr';
+      document.querySelectorAll('[data-interface-platform]').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.interfacePlatform === next));
+      });
+      document.querySelectorAll('[data-interface-node]').forEach(node => {
+        const scope = node.dataset.interfaceScope;
+        const shared = scope === 'public' || scope === 'hardware';
+        node.classList.toggle('is-interface-filtered', !shared && scope !== next);
+      });
+    }
+
+    document.querySelectorAll('[data-target]').forEach(button => button.addEventListener('click', () => activateView(button.dataset.target)));
+    document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => applyFilter(button.dataset.filter)));
+    document.querySelectorAll('[data-product-filter]').forEach(button => button.addEventListener('click', () => applyProductFilter(button.dataset.productFilter)));
+    document.querySelectorAll('[data-node]').forEach(button => button.addEventListener('click', () => selectNode(button.dataset.node)));
+    document.querySelectorAll('[data-flow-target]').forEach(button => button.addEventListener('click', () => activateFlow(button.dataset.flowTarget)));
+    document.querySelectorAll('[data-trace-target]').forEach(button => button.addEventListener('click', () => activateInterfaceTrace(button.dataset.traceTarget)));
+    document.querySelectorAll('[data-interface-platform]').forEach(button => button.addEventListener('click', () => activateInterfacePlatform(button.dataset.interfacePlatform)));
+
+    const initialView = location.hash.slice(1);
+    activateView(['overview', 'platform', 'flows', 'interfaces'].includes(initialView) ? initialView : 'overview');
+    applyFilter('all');
+    applyProductFilter('all-products');
+    activateFlow('imu');
+    activateInterfaceTrace('read');
+    activateInterfacePlatform('zephyr');
+    document.documentElement.dataset.ready = 'true';
+  </script>
+</body>
+</html>

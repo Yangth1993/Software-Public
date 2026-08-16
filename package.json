@@ -1,0 +1,13 @@
+{
+  "name": "software-public-architecture",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline embedded public software architecture explorer and validation tests.",
+  "scripts": {
+    "test:contract": "pwsh -NoProfile -File tests/architecture-html-contract.ps1",
+    "test:ui": "node tests/architecture-html-ui.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

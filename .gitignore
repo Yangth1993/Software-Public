@@ -1,0 +1,18 @@
+# Vendor and platform source trees are intentionally not republished.
+third_party/
+
+# Downloaded PDFs may have separate redistribution terms.
+reference/**/*.pdf
+
+# Generated browser screenshots and temporary render output.
+artifacts/
+tmp/
+
+# Local research and agent progress notes.
+task_plan.md
+findings.md
+progress.md
+
+# Local tooling state.
+.agents/
+.codex/
